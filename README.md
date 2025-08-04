@@ -4,10 +4,11 @@ A comprehensive healthcare application that combines AI-powered medical document
 
 ## 🏥 Project Overview
 
-DocReader is a full-stack healthcare application designed to streamline medical document processing and patient data management. It consists of two main components that work together to provide a complete solution for healthcare providers:
+DocReader is a comprehensive healthcare application designed to streamline medical document processing, patient data management, and real-time medical transcription. It consists of three main components that work together to provide a complete solution for healthcare providers:
 
 1. **Health-Scan-Share** - Modern React frontend for document upload and analysis
 2. **Google Sheet Integration** - Python backend for AI analysis and data management
+3. **D-BoTT** - Voice-based medical scribe system for real-time conversation transcription
 
 ## 🎯 Key Features
 
@@ -17,6 +18,7 @@ DocReader is a full-stack healthcare application designed to streamline medical 
 - **ABHA Integration**: Verify patient identity using India's Ayushman Bharat Health Account system
 - **Real-time Analysis**: Instant AI-powered insights with fallback services
 - **PDF Report Generation**: Generate comprehensive medical reports in PDF format
+- **Voice-Based Medical Scribing**: Real-time transcription and structured medical note generation
 - **Secure Data Handling**: End-to-end encryption and secure API communication
 
 ## 🏗️ Architecture
@@ -36,6 +38,13 @@ DocReader is a full-stack healthcare application designed to streamline medical 
 - **File Processing**: Support for multiple image formats and PDF generation
 - **Authentication**: Google Service Account for secure API access
 
+### Medical Scribe (D-BoTT)
+- **Technology Stack**: Gradio, Python, WebRTC
+- **Voice Processing**: Real-time audio transcription using Groq Whisper API
+- **AI Integration**: Google Gemini API for medical note generation
+- **Interface**: Web-based Gradio interface for easy deployment
+- **Features**: Voice activity detection, structured medical note formatting
+
 ## 📁 Project Structure
 
 ```
@@ -50,11 +59,18 @@ DocReader/
 │   ├── public/                # Static assets
 │   └── package.json           # Frontend dependencies
 │
-└── Google Sheet Integration/   # Python backend server
-    ├── backend_server.py      # Main FastAPI application
-    ├── requirements.txt       # Python dependencies
-    ├── start_backend.py       # Server startup script
-    └── dbott-*.json          # Google Service Account credentials
+├── Google Sheet Integration/   # Python backend server
+│   ├── backend_server.py      # Main FastAPI application
+│   ├── requirements.txt       # Python dependencies
+│   ├── start_backend.py       # Server startup script
+│   └── dbott-*.json          # Google Service Account credentials
+│
+└── D-BoTT-main/               # Voice-based medical scribe
+    ├── stt_v9.py             # Main speech-to-text application
+    ├── fe.py                 # Gradio frontend interface
+    ├── system_prompt.txt     # Medical scribe system prompts
+    ├── doctor_prompt.txt     # Doctor-specific prompts
+    └── jarvis_prompt.txt     # Command processing prompts
 ```
 
 ## 🚀 Getting Started
@@ -65,6 +81,7 @@ DocReader/
 - Python 3.8+
 - Google Cloud Platform account
 - Google Gemini API key
+- Groq API key (for voice transcription)
 
 ### Frontend Setup (health-scan-share)
 
@@ -120,6 +137,30 @@ DocReader/
    python start_backend.py
    ```
 
+### Medical Scribe Setup (D-BoTT-main)
+
+1. **Navigate to the scribe directory**:
+   ```bash
+   cd D-BoTT-main
+   ```
+
+2. **Install Python dependencies**:
+   ```bash
+   pip install gradio webrtcvad librosa google-generativeai groq
+   ```
+
+3. **Configure environment variables**:
+   Create a `.env` file with:
+   ```env
+   GOOGLE_API_KEY=your_gemini_api_key_here
+   GROQ_API_KEY=your_groq_api_key_here
+   ```
+
+4. **Start the medical scribe application**:
+   ```bash
+   python stt_v9.py
+   ```
+
 ## 🔧 Configuration
 
 ### AI Services
@@ -128,6 +169,13 @@ The application supports multiple AI services for document analysis:
 - **Primary**: Google Gemini API (recommended)
 - **Fallback**: Moondream API
 - **Offline Mode**: Basic analysis without AI features
+
+### Voice Transcription Services
+The medical scribe system uses:
+
+- **Primary**: Groq Whisper API (real-time transcription)
+- **AI Processing**: Google Gemini API (medical note generation)
+- **Voice Detection**: WebRTC VAD (Voice Activity Detection)
 
 ### Google Sheets Setup
 1. Create a Google Sheet named "PatientData"
@@ -165,6 +213,13 @@ npm run test
 ```bash
 cd "Google Sheet Integration"
 python test_backend.py
+```
+
+### Medical Scribe Testing
+```bash
+cd D-BoTT-main
+python stt_v9.py
+# Open the provided Gradio interface URL in your browser
 ```
 
 ## 📦 Deployment
@@ -207,6 +262,7 @@ For support and questions:
 - **v1.2.0**: Enhanced AI analysis with multiple services
 - **v1.3.0**: Added PDF report generation
 - **v1.4.0**: Improved UI/UX and ABHA integration
+- **v1.5.0**: Added voice-based medical scribe system (D-BoTT)
 
 ---
 
