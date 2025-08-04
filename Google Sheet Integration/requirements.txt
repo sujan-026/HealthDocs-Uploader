@@ -1,0 +1,14 @@
+# requirements.txt for the imported modules:
+fastapi
+uvicorn[standard]
+python-multipart
+gradio
+pandas
+gspread
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-generativeai
+Pillow
+python-dotenv
+reportlab
