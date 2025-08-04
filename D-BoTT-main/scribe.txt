@@ -1,0 +1,214 @@
+import gradio as gr
+import numpy as np
+import webrtcvad
+import collections
+import audioop
+import os
+import requests
+import time
+import wave
+import librosa
+from tempfile import NamedTemporaryFile
+import google.generativeai as genai
+from dotenv import load_dotenv
+import asyncio # Import the asyncio library
+
+# --- Configuration & Setup ---
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Load API keys from environment
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+# Load the system prompts from external files
+try:
+    with open("system_prompt.txt", "r", encoding="utf-8") as f:
+        GEMINI_SYSTEM_PROMPT = f.read()
+    with open("doctor_prompt.txt", "r", encoding="utf-8") as f:
+        GEMINI_DOCTOR_PROMPT = f.read()
+    with open("jarvis_prompt.txt", "r", encoding="utf-8") as f:
+        GEMINI_JARVIS_PROMPT = f.read()
+except FileNotFoundError as e:
+    print(f"CRITICAL ERROR: Prompt file not found: {e.filename}. Please create it.")
+    exit()
+
+# Audio and VAD configuration
+VAD_AGGRESSIVENESS = 1; TARGET_SAMPLE_RATE = 16000; CHUNK_DURATION_MS = 30
+CHUNK_SIZE = int(TARGET_SAMPLE_RATE * CHUNK_DURATION_MS / 1000)
+SILENCE_DURATION_S = 0.5; THRESHOLD = 400; GEMINI_TRIGGER_WORD_COUNT = 10
+
+# --- Gemini Model Configuration ---
+
+GEMINI_MODEL_NAME = 'gemini-2.5-flash-lite-preview-06-17'
+gemini_scribe_model, gemini_doctor_model, gemini_jarvis_model = None, None, None
+
+if GOOGLE_API_KEY:
+    try:
+        genai.configure(api_key=GOOGLE_API_KEY)
+        gemini_scribe_model = genai.GenerativeModel(GEMINI_MODEL_NAME)
+        gemini_doctor_model = genai.GenerativeModel(GEMINI_MODEL_NAME)
+        gemini_jarvis_model = gemini_doctor_model
+        print(f"Successfully configured all Gemini models: {GEMINI_MODEL_NAME}")
+    except Exception as e:
+        print(f"CRITICAL ERROR configuring Google AI: {e}")
+else:
+    print("CRITICAL ERROR: GOOGLE_API_KEY not found in .env file.")
+
+# --- Helper Functions ---
+
+def transcribe_audio_bytes(audio_bytes):
+    # This synchronous function remains the same
+    print("Sending audio to Groq for transcription...")
+    try:
+        with NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
+            # ... (rest of the function is unchanged)
+            temp_file_path = temp_file.name
+            with wave.open(temp_file, "wb") as wf:
+                wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(TARGET_SAMPLE_RATE)
+                wf.writeframes(audio_bytes)
+        with open(temp_file_path, "rb") as file:
+            files = {"file": (os.path.basename(temp_file_path), file.read())}
+            data = {"model": "whisper-large-v3"}
+            response = requests.post(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {GROQ_API_KEY}"}, files=files, data=data)
+            response.raise_for_status()
+            return response.json().get("text", "")
+    except Exception as e: return f"[Transcription Error: {e}]"
+    finally:
+        if 'temp_file_path' in locals() and os.path.exists(temp_file_path): os.remove(temp_file_path)
+
+# --- ASYNCHRONOUS Gemini Helper Functions ---
+
+async def get_gemini_summary_async(full_transcript, previous_summary):
+    """ASYNCHRONOUSLY generates the structured medical note."""
+    if not full_transcript.strip() or gemini_scribe_model is None: return previous_summary
+    print("Requesting Scribe summary update (async)...")
+    try:
+        prompt = f"""{GEMINI_SYSTEM_PROMPT}\n\n**PREVIOUS SUMMARY:**\n```markdown\n{previous_summary}\n```\n\n**FULL TRANSCRIPT:**\n\"\"\"\n{full_transcript}\n\"\"\""""
+        response = await gemini_scribe_model.generate_content_async(prompt)
+        return response.text
+    except Exception as e: print(f"Error calling Scribe API: {e}"); return f"{previous_summary}\n\n**[Scribe Error]**"
+
+async def get_doctor_preview_async(full_transcript):
+    """ASYNCHRONOUSLY generates the Doctor's Assistant preview."""
+    if not full_transcript.strip() or gemini_doctor_model is None: return "Awaiting conversation..."
+    print("Requesting Doctor Assistant preview update (async)...")
+    try:
+        prompt = f"""{GEMINI_DOCTOR_PROMPT}\n\n**FULL CONVERSATION TRANSCRIPT SO FAR:**\n\"\"\"\n{full_transcript}\n\"\"\""""
+        response = await gemini_doctor_model.generate_content_async(prompt)
+        return response.text
+    except Exception as e: print(f"Error calling Doctor Assistant API: {e}"); return "**[Assistant Error]**"
+
+async def extract_jarvis_command_async(text_segment):
+    """ASYNCHRONOUSLY checks for 'jarvis' and extracts the command."""
+    if gemini_jarvis_model is None or "jarvis" not in text_segment.lower():
+        return None
+    print("Keyword 'jarvis' detected. Requesting command extraction (async)...")
+    try:
+        prompt = f"""{GEMINI_JARVIS_PROMPT}\n\n**TEXT SEGMENT TO ANALYZE:**\n\"\"\"\n{text_segment}\n\"\"\""""
+        response = await gemini_jarvis_model.generate_content_async(prompt)
+        if response.text.strip() and response.text.strip() != "[NO_COMMAND]":
+            return response.text.strip()
+        return None
+    except Exception as e: print(f"Error calling Jarvis extractor API: {e}"); return None
+
+
+# --- Gradio Core Logic (Now Asynchronous) ---
+async def process_audio_stream(stream, state):
+    if state is None:
+        state = {
+            "vad": webrtcvad.Vad(VAD_AGGRESSIVENESS), "is_speaking": False, "silent_chunks_count": 0, "audio_buffer": b'',
+            "speech_buffer": collections.deque(), "full_transcription": "", "last_gemini_word_count": 0,
+            "current_summary": "### Live Medical Note\n\n*Awaiting conversation...*",
+            "doctor_preview": "### Doctor's Assistant\n\n*Awaiting conversation...*",
+            "jarvis_commands": []
+        }
+
+    # This part remains mostly the same, just handling async calls now
+    sample_rate, audio_chunk = stream
+    if sample_rate is None or audio_chunk is None:
+         return state["full_transcription"], state["current_summary"], state["doctor_preview"], "\n".join(state["jarvis_commands"]), state
+
+    resampled_chunk = librosa.resample(y=audio_chunk.astype(np.float32) / 32768.0, orig_sr=sample_rate, target_sr=TARGET_SAMPLE_RATE)
+    pcm_chunk = (resampled_chunk * 32767).astype(np.int16).tobytes()
+    state["audio_buffer"] += pcm_chunk
+
+    while len(state["audio_buffer"]) >= CHUNK_SIZE * 2:
+        vad_chunk = state["audio_buffer"][:CHUNK_SIZE * 2]
+        state["audio_buffer"] = state["audio_buffer"][CHUNK_SIZE * 2:]
+        try:
+            is_speech_active = state["vad"].is_speech(vad_chunk, TARGET_SAMPLE_RATE)
+            volume = audioop.rms(vad_chunk, 2)
+        except Exception: is_speech_active, volume = False, 0
+
+        if is_speech_active and volume > THRESHOLD:
+            if not state["is_speaking"]: print("Speech detected...", end="", flush=True); state["is_speaking"] = True
+            state["speech_buffer"].append(vad_chunk); state["silent_chunks_count"] = 0
+        elif state["is_speaking"]:
+            state["speech_buffer"].append(vad_chunk); state["silent_chunks_count"] += 1
+            if state["silent_chunks_count"] > int(SILENCE_DURATION_S * 1000 / CHUNK_DURATION_MS):
+                print(" Silence detected, processing.")
+                recorded_audio = b"".join(state["speech_buffer"])
+                new_transcription = transcribe_audio_bytes(recorded_audio)
+                
+                if new_transcription.strip() and "Error" not in new_transcription:
+                    state["full_transcription"] += " " + new_transcription
+                    
+                    # Create and run API calls concurrently
+                    scribe_task = get_gemini_summary_async(state["full_transcription"], state["current_summary"])
+                    doctor_task = get_doctor_preview_async(state["full_transcription"])
+                    jarvis_task = extract_jarvis_command_async(new_transcription)
+                    
+                    # asyncio.gather runs all tasks at the same time
+                    results = await asyncio.gather(scribe_task, doctor_task, jarvis_task)
+                    
+                    # Unpack the results
+                    state["current_summary"] = results[0]
+                    state["doctor_preview"] = results[1]
+                    jarvis_command = results[2]
+
+                    if jarvis_command:
+                        state["jarvis_commands"].append(f"▶ {jarvis_command}")
+
+                state["is_speaking"] = False; state["speech_buffer"].clear()
+                print("\nListening...")
+
+    jarvis_output = "\n".join(state["jarvis_commands"])
+    return state["full_transcription"].strip(), state["current_summary"], state["doctor_preview"], jarvis_output, state
+
+def clear_all():
+    return "", "### Live Medical Note\n\n*Awaiting conversation...*", "### Doctor's Assistant\n\n*Awaiting conversation...*", "", None
+
+# --- Gradio UI (No changes needed here) ---
+custom_css = """
+#summary-output-container .gradio-container { min-height: 500px; }
+#doctor-preview-container .gradio-container { min-height: 250px; }
+#jarvis-output .gradio-container { min-height: 250px; }
+"""
+with gr.Blocks(theme=gr.themes.Soft(), title="AI Medical Scribe & Assistant", css=custom_css) as demo:
+    gr.Markdown("# AI Medical Scribe & Assistant")
+    gr.Markdown("Click 'Start Recording' and begin the conversation. To issue a command, say **'Jarvis'** followed by your request.")
+    state = gr.State(None)
+    with gr.Row():
+        audio_input = gr.Audio(sources="microphone", streaming=True, label="Live Audio Stream")
+    with gr.Row():
+        transcription_output = gr.Textbox(label="Live Transcription (Whisper)", interactive=False, lines=25, placeholder="Raw transcription will appear here...")
+        summary_output = gr.Markdown(label="Live Structured Note (Scribe)", value="### Live Medical Note\n\n*Awaiting conversation...*", elem_id="summary-output-container")
+    with gr.Row():
+        doctor_preview_output = gr.Markdown(label="Doctor's Assistant Preview", value="### Doctor's Assistant\n\n*Awaiting conversation...*", elem_id="doctor-preview-container")
+        jarvis_output = gr.Textbox(label="Jarvis Commands Log", interactive=False, lines=10, placeholder="Commands issued to Jarvis will appear here...", elem_id="jarvis-output")
+    clear_button = gr.Button("Clear All and Reset")
+    audio_input.stream(
+        fn=process_audio_stream, inputs=[audio_input, state],
+        outputs=[transcription_output, summary_output, doctor_preview_output, jarvis_output, state], show_progress="hidden")
+    clear_button.click(
+        fn=clear_all, inputs=[], outputs=[transcription_output, summary_output, doctor_preview_output, jarvis_output, state], api_name=False)
+
+if __name__ == "__main__":
+    if not all([GROQ_API_KEY, GOOGLE_API_KEY]):
+        print("\n" + "="*50); print("ERROR: ONE OR MORE API KEYS NOT FOUND in .env file!"); print("Please ensure GROQ_API_KEY and GOOGLE_API_KEY are set."); print("="*50 + "\n")
+    else:
+        demo.launch(share=True, debug=True)
