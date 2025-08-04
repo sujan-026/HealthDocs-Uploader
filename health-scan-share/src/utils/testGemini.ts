@@ -20,7 +20,7 @@ export async function testGeminiAPIKey(apiKey: string): Promise<boolean> {
 
 // Test the current API key
 export function runAPIKeyTest() {
-  const apiKey = "AIzaSyDLSjOPlkebyaskBXyxDRtstbQNLuZcngI";
+  const apiKey = "";
   testGeminiAPIKey(apiKey).then(isWorking => {
     if (isWorking) {
       console.log('✅ API key is working correctly!');
