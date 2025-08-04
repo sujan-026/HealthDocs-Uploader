@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Medical/Healthcare themed color palette */
+    --background: 210 20% 98%;
+    --foreground: 210 15% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 210 15% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 15% 15%;
+
+    /* Primary: Medical emerald green */
+    --primary: 160 84% 39%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 160 84% 35%;
+
+    /* Secondary: Soft medical blue */
+    --secondary: 200 18% 96%;
+    --secondary-foreground: 210 15% 15%;
+
+    /* Muted: Calming grays */
+    --muted: 210 20% 96%;
+    --muted-foreground: 210 10% 45%;
+
+    /* Accent: Professional blue */
+    --accent: 214 100% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Medical status colors */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Medical UI elements */
+    --border: 210 20% 90%;
+    --input: 210 20% 95%;
+    --ring: 160 84% 39%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    /* Dark theme for medical app */
+    --background: 210 25% 8%;
+    --foreground: 210 20% 90%;
+
+    --card: 210 25% 10%;
+    --card-foreground: 210 20% 90%;
+
+    --popover: 210 25% 10%;
+    --popover-foreground: 210 20% 90%;
+
+    --primary: 160 84% 39%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 160 84% 35%;
+
+    --secondary: 210 25% 15%;
+    --secondary-foreground: 210 20% 90%;
+
+    --muted: 210 25% 15%;
+    --muted-foreground: 210 10% 60%;
+
+    --accent: 214 100% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 25% 20%;
+    --input: 210 25% 15%;
+    --ring: 160 84% 39%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Medical app specific styles */
+  .medical-gradient {
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.1), hsl(var(--accent) / 0.05));
+  }
+
+  .upload-zone-hover {
+    @apply border-primary/50 bg-primary/5;
+  }
+
+  .status-processing {
+    @apply animate-pulse;
+  }
+
+  /* Voice recording animation */
+  .recording-pulse {
+    animation: recording 1.5s ease-in-out infinite;
+  }
+
+  @keyframes recording {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.8; }
+  }
+
+  /* File upload progress */
+  .progress-bar {
+    transition: width 0.3s ease-in-out;
+  }
+
+  /* Accessibility improvements */
+  @media (prefers-reduced-motion: reduce) {
+    .recording-pulse,
+    .status-processing {
+      animation: none;
+    }
+  }
+}
